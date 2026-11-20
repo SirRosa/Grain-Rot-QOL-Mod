@@ -1,4 +1,4 @@
--- Grain Rot QOL v0.1.5 Story stutter hotfix + furniture XP x2 (UE4SS 3.x)
+-- Grain Rot QOL v0.1.6 Story low-frequency durability, furniture XP x2 (UE4SS)
 -- Only the authoritative host changes game state. No hotkeys or async loops.
 -- All feature gates are independent and errors are contained.
 local CFG = {
@@ -9,7 +9,8 @@ local CFG = {
     InsuranceOnWipe = true,
     PollSeconds = 0.75, HookSample = 8,
     DataRetrySeconds = 10, InventorySnapshotSeconds = 2,
-    DurabilitySweepSeconds = 4, DeliveryRetrySeconds = 4,
+    DurabilitySweepSeconds = 4, StoryDurabilitySweepSeconds = 15,
+    DeliveryRetrySeconds = 4,
     MaxInsuranceItems = 64, MaxDeliveryAttempts = 4,
     OrphanItemSweepSamples = 4, -- inspect loose-but-owned items every fourth snapshot
     SlowPollWarnSeconds = 0.035, -- diagnostic only: measured CPU time
@@ -538,7 +539,12 @@ local function poll(now)
         deliver()
     end
     if now>=S.nextDurability then
-        S.nextDurability=now+CFG.DurabilitySweepSeconds
+        -- In Story the ItemDataTable already sets melee durability loss
+        -- to zero; a full player-slot repair pass every 4s was needless.
+        -- Keep Expedition's original 4s sweep and outpost gun repair.
+        local interval=mode==0 and CFG.StoryDurabilitySweepSeconds
+            or CFG.DurabilitySweepSeconds
+        S.nextDurability=now+interval
         repairEquipment(runState==0)
     end
     S.run=runState
@@ -625,5 +631,5 @@ pcall(function()
         sample=CFG.HookSample-1
     end)
 end)
-log("v0.1.5 story-stutter-fix XP x2 loaded ("..
+log("v0.1.6 Story poll reduction + XP x2 loaded ("..
     (scheduled and "timer" or "animation fallback").."). Host only.")
