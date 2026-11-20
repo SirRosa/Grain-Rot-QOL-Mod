@@ -12,7 +12,7 @@ local function datatype(label, rows)
     function dt:ForEachRow(cb) for k,v in pairs(self.rows) do cb(k,v) end end
     return dt
 end
-local function game(timerMode)
+local function game(timerMode,withExpeditionSaver)
     local now, hooks, logs, clockCalls, searches, spawns=0,{},{},0,{},{}
     local scheduled, asyncCallback
     local charClass=fake({_full="Class /Script/Helden.HeldenEquipableItem"})
@@ -64,6 +64,18 @@ local function game(timerMode)
     }
     local lists={HeldenPlayerCharacter={player},HeldenEquipableItem={main,firearm}}
     local env=setmetatable({
+        debug=withExpeditionSaver and {
+            getinfo=function() return {
+                source="@/Mods/GrainRotQOL/Scripts/main.lua"
+            } end
+        } or debug,
+        io=withExpeditionSaver and {
+            open=function(p,mode)
+                if p=="/Mods/ExpeditionSaver/enabled.txt" and mode=="rb" then
+                    return {close=function() end}
+                end
+            end
+        } or io,
         print=function(x) logs[#logs+1]=x end,
         os={clock=function() clockCalls=clockCalls+1;return now end},
         FindFirstOf=function(n) searches[n]=(searches[n] or 0)+1;return objects[n] end,
@@ -166,6 +178,23 @@ test("failed party run spawns gear once at lift after item actors disappear",fun
     t.trigger(12)
     assert(#t.spawns==2,"must not duplicate on repeated tick")
 end)
+test("ExpeditionSaver coexistence turns off duplicate QOL insurance automatically",function()
+    local t=game(nil,true)
+    t.gs.CurrentDungeonRun.State=2;t.trigger(1)
+    t.lists.HeldenEquipableItem={}
+    t.gs.CurrentDungeonRun.State=3;t.gs.CurrentDungeonRun.Flags=1;t.trigger(1)
+    t.gs.CurrentDungeonRun.State=0;t.trigger(1)
+    assert(#t.spawns==0,
+        "QOL must not spawn gear when ExpeditionSaver is also enabled")
+    assert(t.plant.XP==30,
+        "insurance compatibility must not disable QOL balance features")
+    local logged=false
+    for _,line in ipairs(t.logs) do
+        if line:find("COMPAT ExpeditionSaver enabled",1,true) then logged=true end
+    end
+    assert(logged,"log must identify insurance handoff")
+end)
+
 test("successful extraction must not manufacture extra items",function()
     local t=game()
     t.gs.CurrentDungeonRun.State=2;t.trigger()
