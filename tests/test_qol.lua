@@ -12,8 +12,9 @@ local function datatype(label, rows)
     function dt:ForEachRow(cb) for k,v in pairs(self.rows) do cb(k,v) end end
     return dt
 end
-local function game()
+local function game(timerMode)
     local now, hooks, logs, clockCalls, searches, spawns=0,{},{},0,{},{}
+    local scheduled, asyncCallback
     local charClass=fake({_full="Class /Script/Helden.HeldenEquipableItem"})
     local gunClass=fake({_full="Class /Script/Helden.HeldenRangedWeapon"})
     function gunClass:IsChildOf(cls) return cls==gunClass end
@@ -69,15 +70,33 @@ local function game()
         FindAllOf=function(n) return lists[n] or {} end,
         StaticFindObject=function(path) if path:find("RangedWeapon") then return gunClass end end,
         RegisterHook=function(path,callback) hooks[path]=callback end,
+        LoopInGameThreadWithDelay=timerMode=="direct" and function(ms,cb)
+            assert(ms==750)
+            scheduled=cb
+            return 321
+        end or nil,
+        LoopAsync=timerMode=="async" and function(ms,cb)
+            assert(ms==750)
+            asyncCallback=cb
+        end or nil,
+        ExecuteInGameThread=timerMode=="async" and function(cb) cb() end or nil,
     },{__index=_G})
     assert(loadfile(path,"t",env))()
     local frame="/Game/Animation/ABP_HeldenPlayer.ABP_HeldenPlayer_C:BlueprintUpdateAnimation"
-    assert(hooks[frame])
+    if timerMode then
+        assert(not hooks[frame], "timer builds must not hook animation")
+        assert(timerMode=="direct" and scheduled or
+               timerMode=="async" and asyncCallback, "timer missing")
+    else
+        assert(hooks[frame], "compatibility fallback hook missing")
+    end
     local t={gs=gs,main=main,firearm=firearm,player=player,objects=objects,lists=lists,logs=logs,
         plant=plant,chest=chest,scrap=scrap,sword=sword,rifle=rifle,spawns=spawns,
         trigger=function(dt)
             now=now+(dt or 1)
-            for i=1,8 do hooks[frame]() end
+            if scheduled then scheduled()
+            elseif asyncCallback then assert(asyncCallback()==false)
+            else for i=1,8 do hooks[frame]() end end
         end,
         flood=function(n) for i=1,n do hooks[frame]() end end,
         stats=function() return clockCalls,searches end,
@@ -160,6 +179,18 @@ test("clients never modify tables or spawn items",function()
     assert(t.plant.XP==6 and t.scrap.Parsed_ScrapReward.Gold==1)
     assert(t.main.ItemDurability==12)
     assert(#t.spawns==0)
+end)
+test("game-thread timer runs QOL without animation hook",function()
+    local t=game("direct")
+    t.trigger()
+    assert(t.plant.XP==30)
+    assert(t.sword.UseDurabilityLoss==0)
+end)
+test("UE4SS v3 async timer runs QOL without animation hook",function()
+    local t=game("async")
+    t.trigger()
+    assert(t.plant.XP==30)
+    assert(t.sword.UseDurabilityLoss==0)
 end)
 test("performance: 1600 animation calls require at most 201 clocks",function()
     local t=game();t.trigger()
