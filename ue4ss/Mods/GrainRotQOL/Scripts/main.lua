@@ -1,4 +1,4 @@
--- Grain Rot QOL v0.1.0-preview (Helden UE 5.7 / UE4SS 3.x)
+-- Grain Rot QOL v0.1.2-insurance-compat (Helden UE 5.7 / UE4SS 3.x)
 -- Only the authoritative host changes game state. No hotkeys or async loops.
 -- All feature gates are independent and errors are contained.
 local CFG = {
@@ -13,8 +13,31 @@ local CFG = {
     MaxInsuranceItems = 64, MaxDeliveryAttempts = 4,
     Verbose = false,
 }
+-- The user's ExpeditionSaver also restores gear after a wipe. Running
+-- two independent insurance spawners can duplicate or displace equipment,
+-- especially newly added native slots 5-10. Automatically defer insurance
+-- to ExpeditionSaver when its UE4SS enabled.txt exists alongside this mod.
+-- All QOL balance/durability features remain enabled.
+local function expeditionSaverEnabled()
+    local ok,where=pcall(function() return debug.getinfo(1,"S").source end)
+    if not ok or type(where)~="string" then return false,"source_unknown" end
+    local source=where:gsub("^@","")
+    local dir=source:match("^(.-[/\\])GrainRotQOL[/\\]Scripts[/\\]main%.lua$")
+    if not dir then return false,"mod_path_unknown" end
+    if not io or type(io.open)~="function" then return false,"io_unavailable" end
+    local sep=source:find("\\",1,true) and "\\" or "/"
+    local filename=dir.."ExpeditionSaver"..sep.."enabled.txt"
+    local f=io.open(filename,"rb")
+    if not f then return false,"not_installed" end
+    f:close()
+    return true,filename
+end
+local saverPresent,saverSource=expeditionSaverEnabled()
+if saverPresent then CFG.InsuranceOnWipe=false end
+
 local prefix = "[GrainRotQOL] "
 local function log(msg) print(prefix .. tostring(msg) .. "\n") end
+if saverPresent then log("COMPAT ExpeditionSaver enabled; QOL InsuranceOnWipe disabled to avoid duplicate item restores") end
 local function verbose(msg) if CFG.Verbose then log(msg) end end
 local function valid(obj)
     if not obj then return false end
