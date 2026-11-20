@@ -1,6 +1,10 @@
 # Grain Rot QOL — osobny mod UE4SS
 
-**v0.1.0-preview — wersja testowa.** Nie zastępuje Grain Rot Depth Keeper, można instalować równolegle. Instalacja tylko na komputerze hosta.
+**v0.1.2-expedition-compat — wersja testowa.** Automatyczna kompatybilność z `ExpeditionSaver` i `GrainRotQuickJunk`. Pozostałe poprawki rozgrywki pozostają aktywne.
+
+Jeżeli obok folderu `GrainRotQOL` istnieje `ExpeditionSaver/enabled.txt`, QOL automatycznie ustawia `InsuranceOnWipe=false`. To ważne: inaczej dwa niezależne mody mogłyby odtworzyć te same przedmioty po śmierci i powodować duplikacje, szczególnie w rozszerzonym ekwipunku 10-slotowym. Log: `[GrainRotQOL] COMPAT ExpeditionSaver enabled`. Gdy nie ma ExpeditionSaver, ubezpieczenie QOL zachowuje dotychczasowe działanie.
+
+Odrębne systemy zarządzania zapisem/respawnem nadal wymagają testu w prawdziwej grze. Powodzenie GitHub Actions nie dowodzi braku duplikacji na żywym serwerze. Nie zastępuje Grain Rot Depth Keeper, można instalować równolegle. Instalacja tylko na komputerze hosta.
 
 ## Funkcje
 
