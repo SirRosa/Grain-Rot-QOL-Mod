@@ -467,7 +467,7 @@ local function repairEquipment(outpost)
     end
 end
 
-local function poll()
+local function poll(now)
     -- A GameMode only exists with authority; never mutate client's data.
     local gm=find("GameModeBase")
     if not gm then return end
@@ -488,7 +488,7 @@ local function poll()
     if not run then return end
     local runState=enum(get(run,"State")) or 0
     local runFlags=get(run,"Flags")
-    local now=os.clock()
+    now=now or os.clock()
     if now>=S.nextTables then
         S.nextTables=now+CFG.DataRetrySeconds
         applyTables()
@@ -539,10 +539,15 @@ end
 -- whenever supported; only legacy UE4SS builds require the animation fallback.
 local hookRegistered=false
 local sample=CFG.HookSample-1
+-- The Windows os.clock() is PROCESS CPU TIME, not wall-time.
+-- Timer callbacks arrive at most every 750ms; count scheduled ticks instead
+-- of letting heavy CPU activity accelerate expensive 2/4/10s sweeps.
+local timerSeconds=0
 local lastSlowPoll=-1000
-local function safe_poll()
+local function safe_poll(fromTimer)
     local started=os.clock()
-    local ok,err=pcall(poll)
+    if fromTimer then timerSeconds=timerSeconds+CFG.PollSeconds end
+    local ok,err=pcall(poll,fromTimer and timerSeconds or nil)
     local ended=os.clock()
     if ended-started>=CFG.SlowPollWarnSeconds and
        ended-lastSlowPoll>=5 then
@@ -576,7 +581,9 @@ end
 
 local scheduled=false
 if type(LoopInGameThreadWithDelay)=="function" then
-    local ok,handle=pcall(LoopInGameThreadWithDelay,750,safe_poll)
+    local ok,handle=pcall(LoopInGameThreadWithDelay,750,function()
+        safe_poll(true)
+    end)
     if ok and handle~=nil then
         scheduled=true
         log("game-thread timer active (750 ms); no animation hook")
@@ -585,7 +592,9 @@ end
 if not scheduled and type(LoopAsync)=="function" and
    type(ExecuteInGameThread)=="function" then
     local ok,err=pcall(LoopAsync,750,function()
-        local queued,why=pcall(ExecuteInGameThread,safe_poll)
+        local queued,why=pcall(ExecuteInGameThread,function()
+            safe_poll(true)
+        end)
         if not queued and not S.warned then
             S.warned=true
             log("game-thread poll queue failed: "..tostring(why))
