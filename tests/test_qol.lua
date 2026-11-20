@@ -58,6 +58,7 @@ local function game()
     local player=fake({EquipedItems={main,firearm},ItemSlots={}})
     local objects={
         GameModeBase=fake(),HeldenGameState=gs,HeldenDataSingleton=singleton,
+        HeldenGameInstance=fake({CurrentSaveGame=fake({MetaData={GameSlot=0}})}),
         HeldenDungeonElevator=elevator,
     }
     local lists={HeldenPlayerCharacter={player},HeldenEquipableItem={main,firearm}}
@@ -72,7 +73,7 @@ local function game()
     assert(loadfile(path,"t",env))()
     local frame="/Game/Animation/ABP_HeldenPlayer.ABP_HeldenPlayer_C:BlueprintUpdateAnimation"
     assert(hooks[frame])
-    local t={gs=gs,main=main,firearm=firearm,objects=objects,lists=lists,logs=logs,
+    local t={gs=gs,main=main,firearm=firearm,player=player,objects=objects,lists=lists,logs=logs,
         plant=plant,chest=chest,scrap=scrap,sword=sword,rifle=rifle,spawns=spawns,
         trigger=function(dt)
             now=now+(dt or 1)
@@ -173,4 +174,25 @@ test("absent data singleton gracefully skips changes without exception",function
     t.trigger()
     assert(t.plant.XP==6)
 end)
+test("slotted but not actively equipped items are recovered",function()
+    local t=game()
+    t.player.EquipedItems={}
+    t.main.PreviousOwner=t.player
+    t.main.CurrentSlot=fake()
+    t.gs.CurrentDungeonRun.State=2;t.trigger()
+    t.lists.HeldenEquipableItem={}
+    t.gs.CurrentDungeonRun.State=3;t.gs.CurrentDungeonRun.Flags=1;t.trigger()
+    t.gs.CurrentDungeonRun.State=0;t.trigger()
+    assert(#t.spawns==1)
+end)
+test("slot switch cancels insurance before returning to outpost",function()
+    local t=game()
+    t.gs.CurrentDungeonRun.State=2;t.trigger()
+    t.gs.CurrentDungeonRun.State=3;t.gs.CurrentDungeonRun.Flags=1;t.trigger()
+    t.objects.HeldenGameInstance.CurrentSaveGame.MetaData.GameSlot=1
+    t.lists.HeldenEquipableItem={}
+    t.gs.CurrentDungeonRun.State=0;t.trigger()
+    assert(#t.spawns==0)
+end)
+
 print("ALL "..total.." TESTS PASSED")
