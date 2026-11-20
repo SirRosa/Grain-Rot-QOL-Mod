@@ -283,4 +283,19 @@ test("playerless durability repair does not scan every loose item",function()
         "repair without players must not scan every world item")
 end)
 
+test("Story durability sweeps are deferred for 15 seconds but keep melee repair",function()
+    local t=game("direct")
+    t.gs.GameModeType=0
+    t.gs.CurrentDungeonRun=nil
+    t.objects.HeldenGameInstance.CurrentSaveGame.GameMode=0
+    t.trigger(0.75)
+    t.main.ItemDurability=3
+    t.trigger(4)
+    assert(t.main.ItemDurability==3,
+        "a full player item scan should NOT repeat every 4s in Story")
+    t.trigger(12)
+    assert(t.main.ItemDurability==50,
+        "Story melee item is still repaired on the next slow sweep")
+end)
+
 print("ALL "..total.." TESTS PASSED")
