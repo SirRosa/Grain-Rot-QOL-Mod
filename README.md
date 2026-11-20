@@ -1,5 +1,16 @@
 # Grain Rot QOL — osobny mod UE4SS
 
+## v0.1.3 — Story Mode and stutter fixes (TEST BUILD)
+
+- EHeldenGameMode.Default=0 (Story) now applies furniture XP, loot Gold multipliers and equipped-item durability even if the world has no active DungeonRun.
+- Story is considered active gameplay for firearm wear, NOT an Expedition outpost with automatic gun repair every four seconds.
+- Includes earlier timer/wall-time and reduced global UObject scan optimizations.
+- Tested through GitHub Actions simulated UE4SS suite only; real game validation required.
+- When installed alongside Expedition Saver, the QOL `InsuranceOnWipe` option overlaps Expedition Saver's item recovery; prefer disabling one insurance mechanism to avoid duplicate gear.
+
+---
+
+
 ## v0.1.2 stutter hotfix — test
 
 - UE4SS timer 750 ms is the source of scheduling truth: avoids Windows `os.clock()` (process CPU time) accelerating the 2/4/10-second sweeps.
