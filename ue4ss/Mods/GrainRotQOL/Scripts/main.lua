@@ -101,6 +101,9 @@ local function enum(v)
         or (s:find("EndScreen",1,true) and 3)
         or (s:find("Failed",1,true) and 1)
         or (s:find("None",1,true) and 0)
+        or (s:find("Default",1,true) and 0)
+        or (s:find("Story",1,true) and 0)
+        or (s:find("Expedition",1,true) and 1)
 end
 local function failed(v)
     local n=enum(v)
@@ -484,10 +487,16 @@ local function poll(now)
     end
     local gs=find("HeldenGameState")
     if not gs then return end
+    local mode=enum(get(gs,"GameModeType"))
+    if mode==nil then mode=enum(get(save,"GameMode")) end
+    if mode~=0 and mode~=1 then return end
     local run=get(gs,"CurrentDungeonRun")
-    if not run then return end
-    local runState=enum(get(run,"State")) or 0
-    local runFlags=get(run,"Flags")
+    if mode==1 and not run then return end
+    -- EHeldenGameMode.Default=0 is Story. It has no mandatory active
+    -- DungeonRun. Treat as gameplay for XP, loot tables and weapon wear,
+    -- NOT as an outpost that repairs firearms every four seconds.
+    local runState=mode==0 and 2 or (enum(get(run,"State")) or 0)
+    local runFlags=mode==1 and get(run,"Flags") or 0
     now=now or os.clock()
     if now>=S.nextTables then
         S.nextTables=now+CFG.DataRetrySeconds
