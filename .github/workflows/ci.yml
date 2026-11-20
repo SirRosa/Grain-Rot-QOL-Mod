@@ -2,7 +2,7 @@ name: Validate Grain Rot QOL and build install ZIP
 
 on:
   push:
-    branches: [main, fps-timer-hotfix]
+    branches: [main, perf/stutter-reduction, fix/story-mode-qol-v013]
   workflow_dispatch:
   pull_request:
 
@@ -25,11 +25,11 @@ jobs:
       - name: Create install package
         run: |
           mkdir -p out
-          zip -r out/GrainRotQOL-v0.1.1-fps-timer-hotfix.zip ue4ss/Mods/GrainRotQOL/
-          unzip -t out/GrainRotQOL-v0.1.1-fps-timer-hotfix.zip
+          zip -r out/GrainRotQOL-v0.1.4-furniture-xp-x2.zip ue4ss/Mods/GrainRotQOL/
+          unzip -t out/GrainRotQOL-v0.1.4-furniture-xp-x2.zip
       - name: Publish artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GrainRotQOL-v0.1.1-fps-timer-hotfix
-          path: out/GrainRotQOL-v0.1.1-fps-timer-hotfix.zip
+          name: GrainRotQOL-v0.1.4-furniture-xp-x2
+          path: out/GrainRotQOL-v0.1.4-furniture-xp-x2.zip
           if-no-files-found: error

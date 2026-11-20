@@ -31,7 +31,7 @@ local function game(timerMode)
     local asset2=fake({ItemStatsName="Rifle",ItemClass=gunClass,UniqueName="RifleAsset"})
     local singleton=fake({ConstructAssetDataTable=construct,PhysActorDataTable=phys,ItemDataTable=itemTable,
         ItemAssetContainer=fake({ItemAssets={asset1,asset2}})})
-    local gs=fake({CurrentDungeonRun={State=0,Flags=0}})
+    local gs=fake({CurrentDungeonRun={State=0,Flags=0},GameModeType=1})
     local elevator=fake()
     function elevator:K2_GetActorLocation() return {X=1000,Y=2000,Z=100} end
     local world=fake()
@@ -93,10 +93,15 @@ local function game(timerMode)
     local t={gs=gs,main=main,firearm=firearm,player=player,objects=objects,lists=lists,logs=logs,
         plant=plant,chest=chest,scrap=scrap,sword=sword,rifle=rifle,spawns=spawns,
         trigger=function(dt)
-            now=now+(dt or 1)
-            if scheduled then scheduled()
-            elseif asyncCallback then assert(asyncCallback()==false)
-            else for i=1,8 do hooks[frame]() end end
+            local elapsed=dt or 1
+            now=now+elapsed
+            -- Simulate the 750ms engine timer, not one callback for 12s.
+            local repeats=timerMode and math.max(1,math.floor(elapsed/0.75+0.5)) or 1
+            for _=1,repeats do
+                if scheduled then scheduled()
+                elseif asyncCallback then assert(asyncCallback()==false)
+                else for i=1,8 do hooks[frame]() end end
+            end
         end,
         flood=function(n) for i=1,n do hooks[frame]() end end,
         stats=function() return clockCalls,searches end,
@@ -112,10 +117,10 @@ local function test(title,fn)
     print("PASS "..title)
 end
 
-test("furniture XP x5, from small plant 6 to 30",function()
+test("furniture XP x2, from small plant 6 to 12",function()
     local t=game();t.trigger()
-    assert(t.plant.XP==30)
-    assert(t.chest.XP==60 and t.scrap.XP==20)
+    assert(t.plant.XP==12)
+    assert(t.chest.XP==24 and t.scrap.XP==8)
 end)
 test("gold reward: 1 -> 15, 20 -> 60, 2 -> 6; zero unchanged",function()
     local t=game();t.trigger()
@@ -128,7 +133,7 @@ end)
 test("data patch is not compounded by later refresh",function()
     local t=game();t.trigger()
     t.trigger(12);t.trigger(12)
-    assert(t.plant.XP==30)
+    assert(t.plant.XP==12)
     assert(t.plant.Parsed_ScrapValue_Common.Gold==15)
 end)
 test("only melee item templates lose durability cost",function()
@@ -183,13 +188,13 @@ end)
 test("game-thread timer runs QOL without animation hook",function()
     local t=game("direct")
     t.trigger()
-    assert(t.plant.XP==30)
+    assert(t.plant.XP==12)
     assert(t.sword.UseDurabilityLoss==0)
 end)
 test("UE4SS v3 async timer runs QOL without animation hook",function()
     local t=game("async")
     t.trigger()
-    assert(t.plant.XP==30)
+    assert(t.plant.XP==12)
     assert(t.sword.UseDurabilityLoss==0)
 end)
 test("performance: 1600 animation calls require at most 201 clocks",function()
@@ -224,6 +229,33 @@ test("slot switch cancels insurance before returning to outpost",function()
     t.lists.HeldenEquipableItem={}
     t.gs.CurrentDungeonRun.State=0;t.trigger()
     assert(#t.spawns==0)
+end)
+
+test("periodic durability sweeps use wall timer ticks, not CPU clock",function()
+    local t=game("direct")
+    t.gs.CurrentDungeonRun.State=2
+    t.trigger(0.75)
+    t.main.ItemDurability=10
+    t.trigger(0.75)
+    assert(t.main.ItemDurability==10,"a single extra 750ms tick must not trigger 4s sweep")
+    t.trigger(4)
+    assert(t.main.ItemDurability==50,"sweep runs once enough wall-timer ticks elapsed")
+end)
+
+test("Story Default=0 without CurrentDungeonRun still patches XP and currency",function()
+    local t=game("direct")
+    t.gs.GameModeType=0
+    t.gs.CurrentDungeonRun=nil
+    t.objects.HeldenGameInstance.CurrentSaveGame.GameMode=0
+    t.trigger(0.75)
+    assert(t.plant.XP==12 and t.scrap.XP==8,
+        "Story furniture rows must be modified")
+    assert(t.plant.Parsed_ScrapValue_Common.Gold==15,
+        "Story Gold values must be modified")
+    t.firearm.ItemDurability=5
+    t.trigger(5)
+    assert(t.firearm.ItemDurability==5,
+        "Story is active play, never an Expedition outpost")
 end)
 
 print("ALL "..total.." TESTS PASSED")
