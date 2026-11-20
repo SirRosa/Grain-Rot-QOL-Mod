@@ -1,5 +1,14 @@
 # Grain Rot QOL — osobny mod UE4SS
 
+## v0.1.2 stutter hotfix — test
+
+- UE4SS timer 750 ms is the source of scheduling truth: avoids Windows `os.clock()` (process CPU time) accelerating the 2/4/10-second sweeps.
+- Instead of querying every `HeldenEquipableItem` for each durability repair, checks the players' equipped/slotted items. Extra owned items are refreshed periodically rather than on every inventory snapshot.
+- Logs `PERF slow poll CPU=...ms` for unusually expensive polling cycles (diagnostic approximation, not engine frame time).
+- Same XP, wallet multipliers and durability feature switches as before. `InsuranceOnWipe` should be false when Expedition Saver handles equipment restoration.
+- Test version: GitHub Actions mock checks only; measure actual FPS and stutter in the game before merging to main.
+
+
 **v0.1.0-preview — wersja testowa.** Nie zastępuje Grain Rot Depth Keeper, można instalować równolegle. Instalacja tylko na komputerze hosta.
 
 ## Funkcje

@@ -93,10 +93,15 @@ local function game(timerMode)
     local t={gs=gs,main=main,firearm=firearm,player=player,objects=objects,lists=lists,logs=logs,
         plant=plant,chest=chest,scrap=scrap,sword=sword,rifle=rifle,spawns=spawns,
         trigger=function(dt)
-            now=now+(dt or 1)
-            if scheduled then scheduled()
-            elseif asyncCallback then assert(asyncCallback()==false)
-            else for i=1,8 do hooks[frame]() end end
+            local elapsed=dt or 1
+            now=now+elapsed
+            -- Simulate the 750ms engine timer, not one callback for 12s.
+            local repeats=timerMode and math.max(1,math.floor(elapsed/0.75+0.5)) or 1
+            for _=1,repeats do
+                if scheduled then scheduled()
+                elseif asyncCallback then assert(asyncCallback()==false)
+                else for i=1,8 do hooks[frame]() end end
+            end
         end,
         flood=function(n) for i=1,n do hooks[frame]() end end,
         stats=function() return clockCalls,searches end,
@@ -224,6 +229,17 @@ test("slot switch cancels insurance before returning to outpost",function()
     t.lists.HeldenEquipableItem={}
     t.gs.CurrentDungeonRun.State=0;t.trigger()
     assert(#t.spawns==0)
+end)
+
+test("periodic durability sweeps use wall timer ticks, not CPU clock",function()
+    local t=game("direct")
+    t.gs.CurrentDungeonRun.State=2
+    t.trigger(0.75)
+    t.main.ItemDurability=10
+    t.trigger(0.75)
+    assert(t.main.ItemDurability==10,"a single extra 750ms tick must not trigger 4s sweep")
+    t.trigger(4)
+    assert(t.main.ItemDurability==50,"sweep runs once enough wall-timer ticks elapsed")
 end)
 
 print("ALL "..total.." TESTS PASSED")
