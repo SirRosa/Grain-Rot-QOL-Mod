@@ -31,7 +31,7 @@ local function game(timerMode)
     local asset2=fake({ItemStatsName="Rifle",ItemClass=gunClass,UniqueName="RifleAsset"})
     local singleton=fake({ConstructAssetDataTable=construct,PhysActorDataTable=phys,ItemDataTable=itemTable,
         ItemAssetContainer=fake({ItemAssets={asset1,asset2}})})
-    local gs=fake({CurrentDungeonRun={State=0,Flags=0}})
+    local gs=fake({CurrentDungeonRun={State=0,Flags=0},GameModeType=1})
     local elevator=fake()
     function elevator:K2_GetActorLocation() return {X=1000,Y=2000,Z=100} end
     local world=fake()
@@ -240,6 +240,22 @@ test("periodic durability sweeps use wall timer ticks, not CPU clock",function()
     assert(t.main.ItemDurability==10,"a single extra 750ms tick must not trigger 4s sweep")
     t.trigger(4)
     assert(t.main.ItemDurability==50,"sweep runs once enough wall-timer ticks elapsed")
+end)
+
+test("Story Default=0 without CurrentDungeonRun still patches XP and currency",function()
+    local t=game("direct")
+    t.gs.GameModeType=0
+    t.gs.CurrentDungeonRun=nil
+    t.objects.HeldenGameInstance.CurrentSaveGame.GameMode=0
+    t.trigger(0.75)
+    assert(t.plant.XP==30 and t.scrap.XP==20,
+        "Story furniture rows must be modified")
+    assert(t.plant.Parsed_ScrapValue_Common.Gold==15,
+        "Story Gold values must be modified")
+    t.firearm.ItemDurability=5
+    t.trigger(5)
+    assert(t.firearm.ItemDurability==5,
+        "Story is active play, never an Expedition outpost")
 end)
 
 print("ALL "..total.." TESTS PASSED")
