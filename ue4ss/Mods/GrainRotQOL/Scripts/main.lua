@@ -252,7 +252,7 @@ end
 local S={run=0,flags=0,seenRun=false,beenFailed=false,seenSuccess=false,
     lastTick=-1,nextTables=0,nextInventory=0,nextDurability=0,
     snapshot={},pending=nil,deliveryKey=nil,attempts=0,nextDelivery=0,
-    warned=false,lastSummary=nil,delivered=0}
+    warned=false,lastSummary=nil,delivered=0,slot=nil}
 local function itemId(item)
     local id=asstr(get(item,"DynamicSaveName"))
     if id and id~="None" and id~="" then return id end
@@ -274,10 +274,12 @@ local function itemRecord(item)
 end
 local function snapshotInventory()
     local records={}
+    local players={}
     -- A player may have both inventory slots and equipped objects. Merge
     -- by DynamicSaveName/full UObject name, not by item type.
     for _,char in ipairs(all("HeldenPlayerCharacter")) do
         if valid(char) then
+            players[name(char)]=true
             eachArray(get(char,"EquipedItems"),function(obj)
                 local rec=itemRecord(obj)
                 if rec then records[rec.key]=rec end
@@ -286,6 +288,22 @@ local function snapshotInventory()
                 local rec=itemRecord(get(slot,"CurrentItemInSlot"))
                 if rec then records[rec.key]=rec end
             end)
+        end
+    end
+    -- A separate equipment actor can be slotted to the player but not
+    -- included in EquipedItems (game uses both references). Accept only
+    -- a valid current inventory slot AND the same previous owner; dropped
+    -- world items lacking a current slot must not be collected.
+    if next(players) then
+        for _,item in ipairs(all("HeldenEquipableItem")) do
+            if valid(item) then
+                local owner=get(item,"PreviousOwner")
+                local slot=get(item,"CurrentSlot")
+                if valid(owner) and players[name(owner)] and valid(slot) then
+                    local rec=itemRecord(item)
+                    if rec then records[rec.key]=rec end
+                end
+            end
         end
     end
     if next(records) then
@@ -404,6 +422,17 @@ local function poll()
     -- A GameMode only exists with authority; never mutate client's data.
     local gm=find("GameModeBase")
     if not gm then return end
+    local gi=find("HeldenGameInstance")
+    local save=gi and get(gi,"CurrentSaveGame")
+    local slotData=valid(save) and get(save,"MetaData") or nil
+    local slot=num(slotData and get(slotData,"GameSlot"))
+    if slot~=nil then
+        if S.slot~=nil and S.slot~=slot then
+            S.snapshot={};S.pending=nil;S.seenRun=false;S.beenFailed=false
+            log("save slot changed, discarded pending items from previous slot")
+        end
+        S.slot=slot
+    end
     local gs=find("HeldenGameState")
     if not gs then return end
     local run=get(gs,"CurrentDungeonRun")
