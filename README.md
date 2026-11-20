@@ -1,5 +1,14 @@
 # Grain Rot QOL — osobny mod UE4SS
 
+## v0.1.5 — Story stutter reduction (TEST)
+
+- While Story Mode is active, skip Expedition-only inventory insurance snapshots. Previous code enumerated players and searched all `HeldenEquipableItem` actors repeatedly even though Story has no Expedition wipe delivery.
+- Do not enumerate every loose item for durability when no live players exist (during loading, respawn and menus).
+- Preserve all previous Story-mode XP/loot multipliers and the **furniture XP ×2** balance change.
+- Expedition insurance behavior and existing durability handling for live characters remain unchanged.
+- CI is a mocked UE4SS simulation only; the reported stutters must still be checked with live game logs.
+
+
 ## v0.1.4 — XP ×2 (TEST BUILD)
 
 Zmiana wyłącznie balansu XP mebli z ×5 na ×2 w Story i Expedition. Pozostałe usprawnienia i mnożniki bez zmian. Działanie w grze nadal niepotwierdzone.
