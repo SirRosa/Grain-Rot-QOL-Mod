@@ -1,0 +1,35 @@
+name: Validate Grain Rot QOL and build install ZIP
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lua 5.4
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y lua5.4
+      - name: Syntax validation
+        run: luac5.4 -p ue4ss/Mods/GrainRotQOL/Scripts/main.lua tests/test_qol.lua
+      - name: 11 regression tests (simulated UE4SS)
+        run: lua5.4 tests/test_qol.lua
+      - name: Create install package
+        run: |
+          mkdir -p out
+          zip -r out/GrainRotQOL-v0.1.0-preview.zip ue4ss/Mods/GrainRotQOL/
+          unzip -t out/GrainRotQOL-v0.1.0-preview.zip
+      - name: Publish artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GrainRotQOL-v0.1.0-preview
+          path: out/GrainRotQOL-v0.1.0-preview.zip
+          if-no-files-found: error
