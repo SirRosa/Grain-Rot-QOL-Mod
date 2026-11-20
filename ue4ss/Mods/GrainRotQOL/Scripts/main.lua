@@ -1,4 +1,4 @@
--- Grain Rot QOL v0.1.0-preview (Helden UE 5.7 / UE4SS 3.x)
+-- Grain Rot QOL v0.1.5 Story stutter hotfix + furniture XP x2 (UE4SS 3.x)
 -- Only the authoritative host changes game state. No hotkeys or async loops.
 -- All feature gates are independent and errors are contained.
 local CFG = {
@@ -625,5 +625,5 @@ pcall(function()
         sample=CFG.HookSample-1
     end)
 end)
-log("v0.1.1 fps-timer-hotfix loaded ("..
+log("v0.1.5 story-stutter-fix XP x2 loaded ("..
     (scheduled and "timer" or "animation fallback").."). Host only.")
