@@ -463,11 +463,9 @@ local function repairEquipment(outpost)
         end
     end
     for _,item in pairs(S.orphanItems) do repair(item) end
-    -- If players are not yet spawned, retain old behavior for startup and
-    -- menu. The regular active path no longer scans all equipable actors.
-    if not ownersFound then
-        for _,item in ipairs(all("HeldenEquipableItem")) do repair(item) end
-    end
+    -- No live players means there are no carried items to repair.
+    -- Global scanning here was a visible hitch at death/respawn/menu.
+    if not ownersFound then return end
 end
 
 local function poll(now)
@@ -509,7 +507,10 @@ local function poll(now)
             S.pending=nil
         end
         S.beenFailed=false
-        if runState==2 and now>=S.nextInventory then
+        -- Story never reaches an Expedition wipe with elevator delivery.
+        -- Sampling every player's items in Story wasted significant CPU.
+        if CFG.InsuranceOnWipe and mode==1 and runState==2 and
+           now>=S.nextInventory then
             S.nextInventory=now+CFG.InventorySnapshotSeconds
             snapshotInventory()
         end
