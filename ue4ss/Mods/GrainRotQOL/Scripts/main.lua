@@ -2,7 +2,7 @@
 -- Only the authoritative host changes game state. No hotkeys or async loops.
 -- All feature gates are independent and errors are contained.
 local CFG = {
-    FurnitureXP = true, FurnitureXPMult = 5,
+    FurnitureXP = true, FurnitureXPMult = 2,
     LootGold = true, LootGoldMult = 3, JunkGoldMult = 15, JunkGoldThreshold = 1,
     InfiniteNonFirearmDurability = true,
     ResetFirearmsAtOutpost = true,
