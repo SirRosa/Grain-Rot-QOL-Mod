@@ -14,6 +14,7 @@ local function datatype(label, rows)
 end
 local function game(timerMode)
     local now, hooks, logs, clockCalls, searches, spawns=0,{},{},0,{},{}
+    local scans={}
     local scheduled, asyncCallback
     local charClass=fake({_full="Class /Script/Helden.HeldenEquipableItem"})
     local gunClass=fake({_full="Class /Script/Helden.HeldenRangedWeapon"})
@@ -67,7 +68,10 @@ local function game(timerMode)
         print=function(x) logs[#logs+1]=x end,
         os={clock=function() clockCalls=clockCalls+1;return now end},
         FindFirstOf=function(n) searches[n]=(searches[n] or 0)+1;return objects[n] end,
-        FindAllOf=function(n) return lists[n] or {} end,
+        FindAllOf=function(n)
+            scans[n]=(scans[n] or 0)+1
+            return lists[n] or {}
+        end,
         StaticFindObject=function(path) if path:find("RangedWeapon") then return gunClass end end,
         RegisterHook=function(path,callback) hooks[path]=callback end,
         LoopInGameThreadWithDelay=timerMode=="direct" and function(ms,cb)
@@ -105,6 +109,7 @@ local function game(timerMode)
         end,
         flood=function(n) for i=1,n do hooks[frame]() end end,
         stats=function() return clockCalls,searches end,
+        scans=scans,
         host=function(yes) objects.GameModeBase=yes and fake() or nil end,
         tables={construct,phys,itemTable}
     }
@@ -256,6 +261,26 @@ test("Story Default=0 without CurrentDungeonRun still patches XP and currency",f
     t.trigger(5)
     assert(t.firearm.ItemDurability==5,
         "Story is active play, never an Expedition outpost")
+end)
+
+test("Story does not scan world equipment for Expedition-only insurance",function()
+    local t=game("direct")
+    t.gs.GameModeType=0
+    t.gs.CurrentDungeonRun=nil
+    t.objects.HeldenGameInstance.CurrentSaveGame.GameMode=0
+    for i=1,22 do t.trigger(0.75) end
+    assert((t.scans.HeldenEquipableItem or 0)==0,
+        "Story equipment insurance must not perform world-wide UObject scans")
+    assert(t.plant.XP==12 and t.scrap.XP==8,
+        "Story table patch must remain active")
+end)
+
+test("playerless durability repair does not scan every loose item",function()
+    local t=game("direct")
+    t.lists.HeldenPlayerCharacter={}
+    for i=1,12 do t.trigger(0.75) end
+    assert((t.scans.HeldenEquipableItem or 0)==0,
+        "repair without players must not scan every world item")
 end)
 
 print("ALL "..total.." TESTS PASSED")
