@@ -1,16 +1,19 @@
--- Grain Rot QOL v0.1.0-preview (Helden UE 5.7 / UE4SS 3.x)
+-- Grain Rot QOL v0.1.6 Story low-frequency durability, furniture XP x2 (UE4SS)
 -- Only the authoritative host changes game state. No hotkeys or async loops.
 -- All feature gates are independent and errors are contained.
 local CFG = {
-    FurnitureXP = true, FurnitureXPMult = 5,
+    FurnitureXP = true, FurnitureXPMult = 2,
     LootGold = true, LootGoldMult = 3, JunkGoldMult = 15, JunkGoldThreshold = 1,
     InfiniteNonFirearmDurability = true,
     ResetFirearmsAtOutpost = true,
     InsuranceOnWipe = true,
     PollSeconds = 0.75, HookSample = 8,
     DataRetrySeconds = 10, InventorySnapshotSeconds = 2,
-    DurabilitySweepSeconds = 4, DeliveryRetrySeconds = 4,
+    DurabilitySweepSeconds = 4, StoryDurabilitySweepSeconds = 15,
+    DeliveryRetrySeconds = 4,
     MaxInsuranceItems = 64, MaxDeliveryAttempts = 4,
+    OrphanItemSweepSamples = 4, -- inspect loose-but-owned items every fourth snapshot
+    SlowPollWarnSeconds = 0.035, -- diagnostic only: measured CPU time
     Verbose = false,
 }
 local prefix = "[GrainRotQOL] "
@@ -99,6 +102,9 @@ local function enum(v)
         or (s:find("EndScreen",1,true) and 3)
         or (s:find("Failed",1,true) and 1)
         or (s:find("None",1,true) and 0)
+        or (s:find("Default",1,true) and 0)
+        or (s:find("Story",1,true) and 0)
+        or (s:find("Expedition",1,true) and 1)
 end
 local function failed(v)
     local n=enum(v)
@@ -250,6 +256,7 @@ local function applyTables()
 end
 
 local S={run=0,flags=0,seenRun=false,beenFailed=false,seenSuccess=false,
+    orphanSweep=CFG.OrphanItemSweepSamples-1,orphanItems={},durabilityCycle=0,
     lastTick=-1,nextTables=0,nextInventory=0,nextDurability=0,
     snapshot={},pending=nil,deliveryKey=nil,attempts=0,nextDelivery=0,
     warned=false,lastSummary=nil,delivered=0,slot=nil}
@@ -295,14 +302,36 @@ local function snapshotInventory()
     -- a valid current inventory slot AND the same previous owner; dropped
     -- world items lacking a current slot must not be collected.
     if next(players) then
-        for _,item in ipairs(all("HeldenEquipableItem")) do
+        -- Full UObject scans are expensive and used to run every 2 seconds.
+        -- Keep a small cache of special slotted items; only refresh it
+        -- every fourth inventory snapshot. Primary slot arrays remain live.
+        S.orphanSweep=S.orphanSweep+1
+        if S.orphanSweep>=CFG.OrphanItemSweepSamples then
+            S.orphanSweep=0
+            S.orphanItems={}
+            for _,item in ipairs(all("HeldenEquipableItem")) do
+                if valid(item) then
+                    local owner=get(item,"PreviousOwner")
+                    local slot=get(item,"CurrentSlot")
+                    if valid(owner) and players[name(owner)] and valid(slot) then
+                        local key=itemId(item)
+                        S.orphanItems[key]=item
+                    end
+                end
+            end
+        end
+        for key,item in pairs(S.orphanItems) do
             if valid(item) then
                 local owner=get(item,"PreviousOwner")
                 local slot=get(item,"CurrentSlot")
                 if valid(owner) and players[name(owner)] and valid(slot) then
                     local rec=itemRecord(item)
                     if rec then records[rec.key]=rec end
+                else
+                    S.orphanItems[key]=nil
                 end
+            else
+                S.orphanItems[key]=nil
             end
         end
     end
@@ -413,12 +442,34 @@ local function durabilityItem(item,outpost)
     if current and current<max then set(item,"ItemDurability",max) end
 end
 local function repairEquipment(outpost)
-    for _,item in ipairs(all("HeldenEquipableItem")) do
+    local seen={}
+    local ownersFound=false
+    local function repair(item)
+        item=unwrap(item)
+        if not valid(item) then return end
+        local key=name(item)
+        if seen[key] then return end
+        seen[key]=true
         durabilityItem(item,outpost)
     end
+    -- Repair only what real players carry; do not iterate every loose item
+    -- and every furniture/inventory actor in the entire world each sweep.
+    for _,char in ipairs(all("HeldenPlayerCharacter")) do
+        if valid(char) then
+            ownersFound=true
+            eachArray(get(char,"EquipedItems"),repair)
+            eachArray(get(char,"ItemSlots"),function(slot)
+                repair(get(slot,"CurrentItemInSlot"))
+            end)
+        end
+    end
+    for _,item in pairs(S.orphanItems) do repair(item) end
+    -- No live players means there are no carried items to repair.
+    -- Global scanning here was a visible hitch at death/respawn/menu.
+    if not ownersFound then return end
 end
 
-local function poll()
+local function poll(now)
     -- A GameMode only exists with authority; never mutate client's data.
     local gm=find("GameModeBase")
     if not gm then return end
@@ -435,11 +486,17 @@ local function poll()
     end
     local gs=find("HeldenGameState")
     if not gs then return end
+    local mode=enum(get(gs,"GameModeType"))
+    if mode==nil then mode=enum(get(save,"GameMode")) end
+    if mode~=0 and mode~=1 then return end
     local run=get(gs,"CurrentDungeonRun")
-    if not run then return end
-    local runState=enum(get(run,"State")) or 0
-    local runFlags=get(run,"Flags")
-    local now=os.clock()
+    if mode==1 and not run then return end
+    -- EHeldenGameMode.Default=0 is Story. It has no mandatory active
+    -- DungeonRun. Treat as gameplay for XP, loot tables and weapon wear,
+    -- NOT as an outpost that repairs firearms every four seconds.
+    local runState=mode==0 and 2 or (enum(get(run,"State")) or 0)
+    local runFlags=mode==1 and get(run,"Flags") or 0
+    now=now or os.clock()
     if now>=S.nextTables then
         S.nextTables=now+CFG.DataRetrySeconds
         applyTables()
@@ -451,7 +508,10 @@ local function poll()
             S.pending=nil
         end
         S.beenFailed=false
-        if runState==2 and now>=S.nextInventory then
+        -- Story never reaches an Expedition wipe with elevator delivery.
+        -- Sampling every player's items in Story wasted significant CPU.
+        if CFG.InsuranceOnWipe and mode==1 and runState==2 and
+           now>=S.nextInventory then
             S.nextInventory=now+CFG.InventorySnapshotSeconds
             snapshotInventory()
         end
@@ -479,7 +539,12 @@ local function poll()
         deliver()
     end
     if now>=S.nextDurability then
-        S.nextDurability=now+CFG.DurabilitySweepSeconds
+        -- In Story the ItemDataTable already sets melee durability loss
+        -- to zero; a full player-slot repair pass every 4s was needless.
+        -- Keep Expedition's original 4s sweep and outpost gun repair.
+        local interval=mode==0 and CFG.StoryDurabilitySweepSeconds
+            or CFG.DurabilitySweepSeconds
+        S.nextDurability=now+interval
         repairEquipment(runState==0)
     end
     S.run=runState
@@ -490,8 +555,22 @@ end
 -- whenever supported; only legacy UE4SS builds require the animation fallback.
 local hookRegistered=false
 local sample=CFG.HookSample-1
-local function safe_poll()
-    local ok,err=pcall(poll)
+-- The Windows os.clock() is PROCESS CPU TIME, not wall-time.
+-- Timer callbacks arrive at most every 750ms; count scheduled ticks instead
+-- of letting heavy CPU activity accelerate expensive 2/4/10s sweeps.
+local timerSeconds=0
+local lastSlowPoll=-1000
+local function safe_poll(fromTimer)
+    local started=os.clock()
+    if fromTimer then timerSeconds=timerSeconds+CFG.PollSeconds end
+    local ok,err=pcall(poll,fromTimer and timerSeconds or nil)
+    local ended=os.clock()
+    if ended-started>=CFG.SlowPollWarnSeconds and
+       ended-lastSlowPoll>=5 then
+        lastSlowPoll=ended
+        log(string.format("PERF slow poll CPU=%.1fms (inventory/tables/durability)",
+            (ended-started)*1000))
+    end
     if not ok and not S.warned then
         S.warned=true
         log("poll failed (continuing in fail-soft mode): "..tostring(err))
@@ -518,7 +597,9 @@ end
 
 local scheduled=false
 if type(LoopInGameThreadWithDelay)=="function" then
-    local ok,handle=pcall(LoopInGameThreadWithDelay,750,safe_poll)
+    local ok,handle=pcall(LoopInGameThreadWithDelay,750,function()
+        safe_poll(true)
+    end)
     if ok and handle~=nil then
         scheduled=true
         log("game-thread timer active (750 ms); no animation hook")
@@ -527,7 +608,9 @@ end
 if not scheduled and type(LoopAsync)=="function" and
    type(ExecuteInGameThread)=="function" then
     local ok,err=pcall(LoopAsync,750,function()
-        local queued,why=pcall(ExecuteInGameThread,safe_poll)
+        local queued,why=pcall(ExecuteInGameThread,function()
+            safe_poll(true)
+        end)
         if not queued and not S.warned then
             S.warned=true
             log("game-thread poll queue failed: "..tostring(why))
@@ -548,5 +631,5 @@ pcall(function()
         sample=CFG.HookSample-1
     end)
 end)
-log("v0.1.1 fps-timer-hotfix loaded ("..
+log("v0.1.6 Story poll reduction + XP x2 loaded ("..
     (scheduled and "timer" or "animation fallback").."). Host only.")
